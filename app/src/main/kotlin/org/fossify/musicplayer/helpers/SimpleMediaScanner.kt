@@ -17,6 +17,7 @@ import org.fossify.musicplayer.R
 import org.fossify.musicplayer.extensions.audioHelper
 import org.fossify.musicplayer.extensions.config
 import org.fossify.musicplayer.extensions.getFriendlyFolder
+import org.fossify.musicplayer.extensions.playlistTracksDAO
 import org.fossify.musicplayer.models.*
 import java.io.File
 import java.io.FileInputStream
@@ -218,12 +219,18 @@ class SimpleMediaScanner(private val context: Application) {
         }
 
         val excludedFolders = config.excludedFolders
-        val tracksRemovedFromAllTracks = config.tracksRemovedFromAllTracksPlaylist.map { it.toLong() }
-        val tracksWithPlaylist = newTracks
-            .filter { it.mediaStoreId !in tracksRemovedFromAllTracks && it.playListId == 0 && it.path.getParentPath() !in excludedFolders }
-            .onEach { it.playListId = ALL_TRACKS_PLAYLIST_ID }
+        val tracksRemovedFromAllTracks = config.tracksRemovedFromAllTracksPlaylist.map { it.toLong() }.toSet()
 
-        RoomHelper(context).insertTracksWithPlaylist(ArrayList(tracksWithPlaylist))
+        val memberships = newTracks
+            .asSequence()
+            .filter { it.mediaStoreId !in tracksRemovedFromAllTracks }
+            .filter { it.path.getParentPath() !in excludedFolders }
+            .map { PlaylistTrack(playlistId = ALL_TRACKS_PLAYLIST_ID, mediaStoreId = it.mediaStoreId) }
+            .toList()
+
+        // Bygg om endast "All tracks"-relationer
+        context.playlistTracksDAO.clearPlaylist(ALL_TRACKS_PLAYLIST_ID)
+        context.playlistTracksDAO.insertAll(memberships)
     }
 
     private fun getTracksSync(): ArrayList<Track> {
@@ -429,7 +436,11 @@ class SimpleMediaScanner(private val context: Application) {
             val trackId = retriever.extractMetadata(METADATA_KEY_CD_TRACK_NUMBER)?.firstNumber()
             val discNumber = retriever.extractMetadata(METADATA_KEY_DISC_NUMBER)?.firstNumber()
             val year = retriever.extractMetadata(METADATA_KEY_YEAR)?.toIntOrNull() ?: 0
-            val dateAdded = try { (File(path).lastModified() / 1000L).toInt() } catch (_: Exception) { 0 }
+            val dateAdded = try {
+                (File(path).lastModified() / 1000L).toInt()
+            } catch (_: Exception) {
+                0
+            }
             val genre = retriever.extractMetadata(METADATA_KEY_GENRE).orEmpty()
 
             if (title.isNotEmpty()) {

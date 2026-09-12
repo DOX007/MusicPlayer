@@ -17,11 +17,13 @@ interface SongsDao {
     @Query("SELECT * FROM tracks")
     fun getAll(): List<Track>
 
-    @Query("""
+    @Query(
+        """
         SELECT t.* FROM tracks t
         INNER JOIN playlist_tracks pt ON pt.media_store_id = t.media_store_id
         WHERE pt.playlist_id = :playlistId
-    """)
+        """
+    )
     fun getTracksFromPlaylist(playlistId: Int): List<Track>
 
     @Query("SELECT * FROM tracks WHERE artist_id = :artistId")
@@ -29,6 +31,9 @@ interface SongsDao {
 
     @Query("SELECT * FROM tracks WHERE album_id = :albumId")
     fun getTracksFromAlbum(albumId: Long): List<Track>
+
+    @Query("SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = :playlistId")
+    fun getTracksCountFromPlaylist(playlistId: Int): Int
 
     @Query("SELECT * FROM tracks WHERE folder_name = :folderName COLLATE NOCASE GROUP BY media_store_id")
     fun getTracksFromFolder(folderName: String): List<Track>
@@ -41,17 +46,6 @@ interface SongsDao {
 
     @Query("DELETE FROM tracks WHERE media_store_id = :mediaStoreId")
     fun removeTrack(mediaStoreId: Long)
-
-    // OBS: dessa används inte längre för playlist-medlemskap efter refaktor
-    // men kan lämnas kvar tillfälligt om annan kod fortfarande anropar dem.
-    @Query("DELETE FROM tracks WHERE media_store_id = :mediaStoreId AND playlist_id = :playlistId")
-    fun removeTrackFromPlaylist(mediaStoreId: Long, playlistId: Int)
-
-    @Query("DELETE FROM tracks WHERE playlist_id = :playlistId")
-    fun removePlaylistSongs(playlistId: Int)
-
-    @Query("DELETE FROM tracks WHERE playlist_id = :playlistId AND media_store_id IN (:mediaStoreIds)")
-    fun removeTracksFromPlaylist(playlistId: Int, mediaStoreIds: List<Long>)
 
     @Query("UPDATE tracks SET path = :newPath, artist = :artist, title = :title WHERE path = :oldPath")
     fun updateSongInfo(newPath: String, artist: String, title: String, oldPath: String)

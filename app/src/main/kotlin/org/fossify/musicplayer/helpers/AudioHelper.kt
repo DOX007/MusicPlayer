@@ -2,8 +2,8 @@ package org.fossify.musicplayer.helpers
 
 import android.content.Context
 import org.fossify.commons.extensions.addBit
+import org.fossify.commons.extensions.applyProperFilenames
 import org.fossify.commons.extensions.getParentPath
-import org.fossify.commons.helpers.ensureBackgroundThread
 import org.fossify.musicplayer.extensions.*
 import org.fossify.musicplayer.inlines.indexOfFirstOrNull
 import org.fossify.musicplayer.models.*
@@ -61,8 +61,9 @@ class AudioHelper(private val context: Context) {
         context.tracksDAO.updateSongInfo(newPath, artist, title, oldPath)
     }
 
+    // Tar bort själva track-raden (används vid fil-radering)
     fun deleteTrack(mediaStoreId: Long, playlistId: Int) {
-        context.tracksDAO.removeTrackFromPlaylist(mediaStoreId, playlistId)
+        context.tracksDAO.removeTrack(mediaStoreId)
     }
 
     fun deleteTracks(tracks: List<Track>) {
@@ -73,7 +74,7 @@ class AudioHelper(private val context: Context) {
 
     fun removeTracksFromPlaylist(playlistId: Int, mediaStoreIds: List<Long>) {
         if (mediaStoreIds.isEmpty()) return
-        context.tracksDAO.removeTracksFromPlaylist(playlistId, mediaStoreIds)
+        context.playlistTracksDAO.removeTracksFromPlaylist(playlistId, mediaStoreIds)
     }
 
     fun insertArtists(artists: List<Artist>) {
@@ -210,7 +211,7 @@ class AudioHelper(private val context: Context) {
     }
 
     fun getPlaylistTrackCount(playlistId: Int): Int {
-        return context.tracksDAO.getTracksCountFromPlaylist(playlistId)
+        return context.playlistTracksDAO.getTracksCountFromPlaylist(playlistId)
     }
 
     fun updateOrderInPlaylist(playlistId: Int, trackId: Long) {
@@ -219,9 +220,7 @@ class AudioHelper(private val context: Context) {
 
     fun deletePlaylists(playlists: ArrayList<Playlist>) {
         context.playlistDAO.deletePlaylists(playlists)
-        playlists.forEach {
-            context.tracksDAO.removePlaylistSongs(it.id)
-        }
+        context.playlistTracksDAO.clearPlaylists(playlists.map { it.id })
     }
 
     fun removeInvalidAlbumsArtists() {
@@ -254,60 +253,23 @@ class AudioHelper(private val context: Context) {
         return tracks as ArrayList<Track>
     }
 
-    fun getQueuedTracksLazily(callback: (tracks: List<Track>, startIndex: Int, startPositionMs: Long) -> Unit) {
-        ensureBackgroundThread {
-            var queueItems = context.queueDAO.getAll()
-            if (queueItems.isEmpty()) {
-                initQueue()
-                queueItems = context.queueDAO.getAll()
-            }
-
-            val currentItem = context.queueDAO.getCurrent()
-            if (currentItem == null) {
-                callback(emptyList(), 0, 0)
-                return@ensureBackgroundThread
-            }
-
-            val currentTrack = getTrack(currentItem.trackId)
-            if (currentTrack == null) {
-                callback(emptyList(), 0, 0)
-                return@ensureBackgroundThread
-            }
-
-            val startPositionMs = currentItem.lastPosition.seconds.inWholeMilliseconds
-            callback(listOf(currentTrack), 0, startPositionMs)
-
-            val queuedTracks = getQueuedTracks(queueItems)
-            val currentIndex = queuedTracks.indexOfFirstOrNull { it.mediaStoreId == currentTrack.mediaStoreId } ?: 0
-            callback(queuedTracks, currentIndex, startPositionMs)
-        }
+    fun getCurrentTrack(): Track? {
+        val queue = context.queueDAO.getAll()
+        val current = queue.firstOrNull { it.isCurrent } ?: return null
+        return getTrack(current.trackId)
     }
 
-    fun initQueue(): ArrayList<Track> {
-        val tracks = getAllTracks()
-        val queueItems = tracks.mapIndexed { index, mediaItem ->
-            QueueItem(trackId = mediaItem.mediaStoreId, trackOrder = index, isCurrent = index == 0, lastPosition = 0)
-        }
-
-        resetQueue(queueItems)
-        return tracks
+    fun getCurrentTrackDurationMs(): Long {
+        return (getCurrentTrack()?.duration ?: 0).seconds.inWholeMilliseconds
     }
 
-    fun resetQueue(items: List<QueueItem>, currentTrackId: Long? = null, startPosition: Long? = null) {
-        context.queueDAO.deleteAllItems()
-        context.queueDAO.insertAll(items)
-        if (currentTrackId != null && startPosition != null) {
-            val startPositionSeconds = startPosition.milliseconds.inWholeSeconds.toInt()
-            context.queueDAO.saveCurrentTrackProgress(currentTrackId, startPositionSeconds)
-        } else if (currentTrackId != null) {
-            context.queueDAO.saveCurrentTrack(currentTrackId)
-        }
+    fun getCurrentTrackProgressRatio(positionMs: Long): Float {
+        val durationMs = getCurrentTrackDurationMs()
+        if (durationMs <= 0L) return 0f
+        return (positionMs.milliseconds / durationMs.milliseconds).toFloat().coerceIn(0f, 1f)
+    }
+
+    fun findTrackIndexByMediaStoreId(tracks: List<Track>, mediaStoreId: Long): Int {
+        return tracks.indexOfFirstOrNull { it.mediaStoreId == mediaStoreId } ?: -1
     }
 }
-
-private fun Collection<Track>.applyProperFilenames(showFilename: Int): ArrayList<Track> {
-    return distinctBy { "${it.playListId}/${it.path}/${it.mediaStoreId}" }
-        .onEach { it.title = it.getProperTitle(showFilename) }
-        .toCollection(ArrayList())
-}
-

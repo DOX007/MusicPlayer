@@ -51,7 +51,7 @@ class CustomMusicFoldersActivity : SimpleActivity(), RefreshRecyclerViewListener
     }
 
     private fun updateFolders() {
-        val folders = config.customMusicPaths.toMutableList() as ArrayList<String>
+        val folders = ArrayList(config.customMusicPaths)
         binding.customMusicFoldersPlaceholder.apply {
             beVisibleIf(folders.isEmpty())
             setTextColor(getProperTextColor())

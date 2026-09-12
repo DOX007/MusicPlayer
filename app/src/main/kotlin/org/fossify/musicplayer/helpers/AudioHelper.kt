@@ -306,7 +306,8 @@ class AudioHelper(private val context: Context) {
 }
 
 private fun Collection<Track>.applyProperFilenames(showFilename: Int): ArrayList<Track> {
-    return distinctBy { "${it.path}/${it.mediaStoreId}" }
+    return distinctBy { "${it.playListId}/${it.path}/${it.mediaStoreId}" }
         .onEach { it.title = it.getProperTitle(showFilename) }
         .toCollection(ArrayList())
 }
+

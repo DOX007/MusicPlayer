@@ -39,6 +39,7 @@
             android:id="@+id/custom_music_folders_placeholder"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
             android:gravity="center_horizontal"
             android:paddingStart="@dimen/big_margin"
             android:paddingTop="@dimen/activity_margin"

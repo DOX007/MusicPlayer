@@ -12,6 +12,8 @@ import org.fossify.musicplayer.R
 import org.fossify.musicplayer.adapters.CustomMusicFoldersAdapter
 import org.fossify.musicplayer.databinding.ActivityCustomMusicFoldersBinding
 import org.fossify.musicplayer.extensions.config
+import org.fossify.musicplayer.models.Events
+import org.greenrobot.eventbus.EventBus
 
 class CustomMusicFoldersActivity : SimpleActivity(), RefreshRecyclerViewListener {
 
@@ -47,6 +49,7 @@ class CustomMusicFoldersActivity : SimpleActivity(), RefreshRecyclerViewListener
         FilePickerDialog(this, pickFile = false) { path ->
             config.addCustomMusicPath(path)
             updateFolders()
+            EventBus.getDefault().post(Events.RefreshFragments())
         }
     }
 

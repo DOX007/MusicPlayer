@@ -17,6 +17,8 @@ import org.fossify.commons.interfaces.RefreshRecyclerViewListener
 import org.fossify.commons.views.MyRecyclerView
 import org.fossify.musicplayer.databinding.ItemExcludedFolderBinding
 import org.fossify.musicplayer.extensions.config
+import org.fossify.musicplayer.models.Events
+import org.greenrobot.eventbus.EventBus
 
 class CustomMusicFoldersAdapter(
     activity: BaseSimpleActivity,
@@ -136,6 +138,7 @@ class CustomMusicFoldersAdapter(
 
         folders.removeAll(removeFolders)
         removeSelectedItems(positions)
+        EventBus.getDefault().post(Events.RefreshFragments())
         if (folders.isEmpty()) {
             listener?.refreshItems()
         }

@@ -154,7 +154,7 @@ class Config(context: Context) : BaseConfig(context) {
 
     fun removeCustomMusicPath(path: String) {
         val currCustomMusicPaths = HashSet(customMusicPaths)
-        currCustomMusicPaths.remove(path)
+        currCustomMusicPaths.remove(path.removeSuffix("/"))
         customMusicPaths = currCustomMusicPaths
     }
 }

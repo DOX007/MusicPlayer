@@ -24,7 +24,6 @@
         android:id="@+id/custom_music_folders_wrapper"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:fillViewport="true"
         android:scrollbars="none"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 

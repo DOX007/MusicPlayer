@@ -69,6 +69,11 @@ class CustomMusicFoldersAdapter(
 
     override fun getItemCount() = folders.size
 
+    fun updateFolders(folders: ArrayList<String>) {
+        this.folders = folders
+        notifyDataSetChanged()
+    }
+
     private fun getSelectedItems() = folders.filter { selectedKeys.contains(it.hashCode()) } as ArrayList<String>
 
     private fun setupView(view: View, folder: String) {

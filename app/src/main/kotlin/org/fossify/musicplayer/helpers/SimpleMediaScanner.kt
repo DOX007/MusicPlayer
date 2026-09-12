@@ -62,8 +62,10 @@ class SimpleMediaScanner(private val context: Application) {
         ensureBackgroundThread {
             try {
                 scanMediaStore()
-                if (isQPlus() || config.customMusicPaths.isNotEmpty()) {
+                if (isQPlus()) {
                     onScanComplete?.invoke(false)
+                    scanFilesManually()
+                } else if (config.customMusicPaths.isNotEmpty()) {
                     scanFilesManually()
                 }
 

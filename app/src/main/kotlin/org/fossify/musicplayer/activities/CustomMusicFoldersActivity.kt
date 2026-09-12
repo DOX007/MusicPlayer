@@ -44,21 +44,25 @@ class CustomMusicFoldersActivity : SimpleActivity(), RefreshRecyclerViewListener
     }
 
     private fun addFolder() {
-        FilePickerDialog(this, pickFile = false, enforceStorageRestrictions = false) { path ->
+        FilePickerDialog(this, pickFile = false) { path ->
             config.addCustomMusicPath(path)
             updateFolders()
         }
     }
 
     private fun updateFolders() {
-        val folders = ArrayList(config.customMusicPaths)
+        val folders = ArrayList(config.customMusicPaths).apply { sort() }
         binding.customMusicFoldersPlaceholder.apply {
             beVisibleIf(folders.isEmpty())
             setTextColor(getProperTextColor())
         }
 
-        val adapter = CustomMusicFoldersAdapter(this, folders, this, binding.customMusicFoldersList) {}
-        binding.customMusicFoldersList.adapter = adapter
+        val adapter = binding.customMusicFoldersList.adapter as? CustomMusicFoldersAdapter
+        if (adapter == null) {
+            binding.customMusicFoldersList.adapter = CustomMusicFoldersAdapter(this, folders, this, binding.customMusicFoldersList) {}
+        } else {
+            adapter.updateFolders(folders)
+        }
     }
 
     override fun refreshItems() {

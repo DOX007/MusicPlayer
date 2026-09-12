@@ -1,206 +1,166 @@
-package org.fossify.musicplayer.extensions
+package org.fossify.musicplayer.models
 
+import android.content.ContentUris
 import android.net.Uri
-import android.os.Bundle
-import androidx.core.net.toUri
-import androidx.core.os.bundleOf
+import android.provider.MediaStore
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import org.fossify.musicplayer.helpers.EXTRA_ALBUM
-import org.fossify.musicplayer.helpers.EXTRA_ALBUM_ID
-import org.fossify.musicplayer.helpers.EXTRA_ARTIST
-import org.fossify.musicplayer.helpers.EXTRA_ARTIST_ID
-import org.fossify.musicplayer.helpers.EXTRA_COVER_ART
-import org.fossify.musicplayer.helpers.EXTRA_DATE_ADDED
-import org.fossify.musicplayer.helpers.EXTRA_DISC_NUMBER
-import org.fossify.musicplayer.helpers.EXTRA_DURATION
-import org.fossify.musicplayer.helpers.EXTRA_FLAGS
-import org.fossify.musicplayer.helpers.EXTRA_FOLDER_NAME
-import org.fossify.musicplayer.helpers.EXTRA_GENRE
-import org.fossify.musicplayer.helpers.EXTRA_GENRE_ID
-import org.fossify.musicplayer.helpers.EXTRA_ID
-import org.fossify.musicplayer.helpers.EXTRA_MEDIA_STORE_ID
-import org.fossify.musicplayer.helpers.EXTRA_ORDER_IN_PLAYLIST
-import org.fossify.musicplayer.helpers.EXTRA_PATH
-import org.fossify.musicplayer.helpers.EXTRA_PLAYLIST_ID
-import org.fossify.musicplayer.helpers.EXTRA_TITLE
-import org.fossify.musicplayer.helpers.EXTRA_TRACK_ID
-import org.fossify.musicplayer.helpers.EXTRA_YEAR
-import org.fossify.musicplayer.inlines.indexOfFirstOrNull
-import org.fossify.musicplayer.models.*
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
+import org.fossify.commons.extensions.getFilenameFromPath
+import org.fossify.commons.extensions.getFormattedDuration
+import org.fossify.commons.helpers.AlphanumericComparator
+import org.fossify.commons.helpers.SORT_DESCENDING
+import org.fossify.musicplayer.extensions.sortSafely
+import org.fossify.musicplayer.extensions.toMediaItem
+import org.fossify.musicplayer.helpers.*
+import java.io.File
+import java.io.Serializable
 
-fun buildMediaItem(
-    mediaId: String,
-    title: String,
-    album: String? = null,
-    artist: String? = null,
-    genre: String? = null,
-    mediaType: @MediaMetadata.MediaType Int,
-    trackCnt: Int? = null,
-    trackNumber: Int? = null,
-    discNumber: Int? = null,
-    year: Int? = null,
-    sourceUri: Uri? = null,
-    artworkUri: Uri? = null,
-    track: Track? = null
-): MediaItem {
-    val metadata = MediaMetadata.Builder()
-        .setTitle(title)
-        .setAlbumTitle(album)
-        .setArtist(artist)
-        .setGenre(genre)
-        .setIsBrowsable(mediaType != MediaMetadata.MEDIA_TYPE_MUSIC)
-        .setIsPlayable(mediaType == MediaMetadata.MEDIA_TYPE_MUSIC)
-        .setTotalTrackCount(trackCnt)
-        .setTrackNumber(trackNumber)
-        .setDiscNumber(discNumber)
-        .setReleaseYear(year)
-        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-        .setArtworkUri(artworkUri)
-        .apply {
-            if (track != null) {
-                setExtras(createBundleFromTrack(track))
+@Entity(
+    tableName = "tracks",
+    indices = [Index(value = ["media_store_id", "playlist_id"], unique = true)]
+)
+data class Track(
+    @PrimaryKey(autoGenerate = true) var id: Long,
+    @ColumnInfo(name = "media_store_id") var mediaStoreId: Long,
+    @ColumnInfo(name = "title") var title: String,
+    @ColumnInfo(name = "artist") var artist: String,
+    @ColumnInfo(name = "path") var path: String,
+    @ColumnInfo(name = "duration") var duration: Int,
+    @ColumnInfo(name = "album") var album: String,
+    @ColumnInfo(name = "genre") var genre: String,
+    @ColumnInfo(name = "cover_art") val coverArt: String,
+    @ColumnInfo(name = "playlist_id") var playListId: Int,
+    @ColumnInfo(name = "track_id") val trackId: Int?,
+    @ColumnInfo(name = "disc_number") var discNumber: Int?,
+    @ColumnInfo(name = "folder_name") var folderName: String,
+    @ColumnInfo(name = "album_id") var albumId: Long,
+    @ColumnInfo(name = "artist_id") var artistId: Long,
+    @ColumnInfo(name = "genre_id") var genreId: Long,
+    @ColumnInfo(name = "year") var year: Int,
+    @ColumnInfo(name = "date_added") var dateAdded: Int,
+    @ColumnInfo(name = "order_in_playlist") var orderInPlaylist: Int,
+    @ColumnInfo(name = "flags") var flags: Int = 0
+) : Serializable, ListItem() {
+
+    companion object {
+        private const val serialVersionUID = 6717978793256852245L
+
+        fun getComparator(sorting: Int) = Comparator<Track> { first, second ->
+            var result = when {
+                sorting and PLAYER_SORT_BY_TITLE != 0 -> {
+                    when {
+                        first.title == MediaStore.UNKNOWN_STRING && second.title != MediaStore.UNKNOWN_STRING -> 1
+                        first.title != MediaStore.UNKNOWN_STRING && second.title == MediaStore.UNKNOWN_STRING -> -1
+                        else -> AlphanumericComparator().compare(
+                            first.title.lowercase(),
+                            second.title.lowercase()
+                        )
+                    }
+                }
+
+                sorting and PLAYER_SORT_BY_ARTIST_TITLE != 0 -> {
+                    when {
+                        first.artist == MediaStore.UNKNOWN_STRING && second.artist != MediaStore.UNKNOWN_STRING -> 1
+                        first.artist != MediaStore.UNKNOWN_STRING && second.artist == MediaStore.UNKNOWN_STRING -> -1
+                        else -> AlphanumericComparator().compare(
+                            first.artist.lowercase(),
+                            second.artist.lowercase()
+                        )
+                    }
+                }
+
+                sorting and PLAYER_SORT_BY_TRACK_ID != 0 -> {
+                    val discComparison =
+                        (first.discNumber ?: Int.MAX_VALUE).compareTo(second.discNumber ?: Int.MAX_VALUE)
+                    if (discComparison == 0) {
+                        first.trackId?.compareTo(second.trackId ?: 0) ?: 0
+                    } else {
+                        discComparison
+                    }
+                }
+
+                sorting and PLAYER_SORT_BY_DATE_ADDED != 0 ->
+                    first.dateAdded.compareTo(second.dateAdded)
+
+                sorting and PLAYER_SORT_BY_CUSTOM != 0 ->
+                    first.orderInPlaylist.compareTo(second.orderInPlaylist)
+
+                else ->
+                    first.duration.compareTo(second.duration)
+            }
+
+            if (sorting and SORT_DESCENDING != 0) {
+                result *= -1
+            }
+
+            result
+        }
+    }
+
+    fun getBubbleText(sorting: Int) = when {
+        sorting and PLAYER_SORT_BY_TITLE != 0 -> title
+        sorting and PLAYER_SORT_BY_ARTIST_TITLE != 0 -> artist
+        else -> duration.getFormattedDuration()
+    }
+
+    fun getProperTitle(showFilename: Int): String =
+        when (showFilename) {
+            SHOW_FILENAME_NEVER -> title
+            SHOW_FILENAME_IF_UNAVAILABLE ->
+                if (title == MediaStore.UNKNOWN_STRING) path.getFilenameFromPath() else title
+            else -> path.getFilenameFromPath()
+        }
+
+    /**
+     * Returns the correct Uri for this track.
+     *
+     * - Manual cache or missing MediaStore ID:
+     *   - content://... path -> parse Uri directly
+     *   - malformed /content:/... or content:/... -> normalize to content://...
+     *   - otherwise -> file Uri
+     * - .webm -> MediaStore.Video
+     * - otherwise -> MediaStore.Audio
+     */
+    fun getUri(): Uri {
+        if (mediaStoreId == 0L || flags and FLAG_MANUAL_CACHE != 0) {
+            val normalizedPath = when {
+                path.startsWith("/content:/") -> path.removePrefix("/")
+                path.startsWith("content:/") && !path.startsWith("content://") ->
+                    path.replaceFirst("content:/", "content://")
+                else -> path
+            }
+
+            return if (normalizedPath.startsWith("content://")) {
+                Uri.parse(normalizedPath)
+            } else {
+                Uri.fromFile(File(normalizedPath))
             }
         }
-        .build()
 
-    return MediaItem.Builder()
-        .setMediaId(mediaId)
-        .setUri(sourceUri)
-        .setMediaMetadata(metadata)
-        .build()
-}
+        val baseUri = if (path.endsWith(".webm", ignoreCase = true)) {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
 
-fun Track.toMediaItem(): MediaItem {
-    return buildMediaItem(
-        mediaId = mediaStoreId.toString(),
-        title = title,
-        album = album,
-        artist = artist,
-        genre = genre,
-        mediaType = MediaMetadata.MEDIA_TYPE_MUSIC,
-        trackNumber = trackId,
-        discNumber = discNumber,
-        sourceUri = getUri(),
-        artworkUri = coverArt.toUri(),
-        track = this
-    )
-}
-
-fun Playlist.toMediaItem(): MediaItem {
-    return buildMediaItem(
-        mediaId = id.toString(),
-        title = title,
-        mediaType = MediaMetadata.MEDIA_TYPE_PLAYLIST,
-        trackCnt = trackCount
-    )
-}
-
-fun Folder.toMediaItem(): MediaItem {
-    return buildMediaItem(
-        mediaId = title,
-        title = title,
-        mediaType = MediaMetadata.MEDIA_TYPE_PLAYLIST,
-        trackCnt = trackCount
-    )
-}
-
-fun Artist.toMediaItem(): MediaItem {
-    return buildMediaItem(
-        mediaId = id.toString(),
-        title = title,
-        mediaType = MediaMetadata.MEDIA_TYPE_ARTIST,
-        trackCnt = trackCnt,
-        artworkUri = albumArt.toUri()
-    )
-}
-
-fun Album.toMediaItem(): MediaItem {
-    return buildMediaItem(
-        mediaId = id.toString(),
-        title = title,
-        artist = artist,
-        mediaType = MediaMetadata.MEDIA_TYPE_ALBUM,
-        trackCnt = trackCnt,
-        artworkUri = coverArt.toUri(),
-        year = year
-    )
-}
-
-fun Genre.toMediaItem(): MediaItem {
-    return buildMediaItem(
-        title = title,
-        mediaId = id.toString(),
-        mediaType = MediaMetadata.MEDIA_TYPE_GENRE,
-        trackCnt = trackCnt,
-        artworkUri = albumArt.toUri()
-    )
-}
-
-fun Collection<MediaItem>.toTracks() = mapNotNull { it.toTrack() }
-
-fun Collection<MediaItem>.indexOfTrack(track: Track) = indexOfFirst { it.isSameMedia(track) }
-
-fun Collection<MediaItem>.indexOfTrackOrNull(track: Track) = indexOfFirstOrNull { it.isSameMedia(track) }
-
-fun MediaItem?.isSameMedia(track: Track) = this?.mediaId == track.mediaStoreId.toString()
-
-fun MediaItem.toTrack(): Track? = mediaMetadata.extras?.let { createTrackFromBundle(it) }
-
-private fun createBundleFromTrack(track: Track) = bundleOf(
-    EXTRA_ID to track.id,
-    EXTRA_MEDIA_STORE_ID to track.mediaStoreId,
-    EXTRA_TITLE to track.title,
-    EXTRA_ARTIST to track.artist,
-    EXTRA_PATH to track.path,
-    EXTRA_DURATION to track.duration,
-    EXTRA_ALBUM to track.album,
-    EXTRA_GENRE to track.genre,
-    EXTRA_COVER_ART to track.coverArt,
-    EXTRA_PLAYLIST_ID to track.playListId,
-    EXTRA_TRACK_ID to (track.trackId ?: Int.MIN_VALUE),
-    EXTRA_DISC_NUMBER to (track.discNumber ?: Int.MIN_VALUE),
-    EXTRA_FOLDER_NAME to track.folderName,
-    EXTRA_ALBUM_ID to track.albumId,
-    EXTRA_ARTIST_ID to track.artistId,
-    EXTRA_GENRE_ID to track.genreId,
-    EXTRA_YEAR to track.year,
-    EXTRA_DATE_ADDED to track.dateAdded,
-    EXTRA_ORDER_IN_PLAYLIST to track.orderInPlaylist,
-    EXTRA_FLAGS to track.flags
-)
-
-private fun createTrackFromBundle(bundle: Bundle): Track {
-    var discNumber: Int? = bundle.getInt(EXTRA_DISC_NUMBER)
-    if (discNumber == Int.MIN_VALUE) {
-        discNumber = null
+        return ContentUris.withAppendedId(baseUri, mediaStoreId)
     }
 
-    var trackId: Int? = bundle.getInt(EXTRA_TRACK_ID)
-    if (trackId == Int.MIN_VALUE) {
-        trackId = null
-    }
-
-    return Track(
-        id = bundle.getLong(EXTRA_ID),
-        mediaStoreId = bundle.getLong(EXTRA_MEDIA_STORE_ID),
-        title = bundle.getString(EXTRA_TITLE) ?: "",
-        artist = bundle.getString(EXTRA_ARTIST) ?: "",
-        path = bundle.getString(EXTRA_PATH) ?: "",
-        duration = bundle.getInt(EXTRA_DURATION),
-        album = bundle.getString(EXTRA_ALBUM) ?: "",
-        genre = bundle.getString(EXTRA_GENRE) ?: "",
-        coverArt = bundle.getString(EXTRA_COVER_ART) ?: "",
-        playListId = bundle.getInt(EXTRA_PLAYLIST_ID),
-        trackId = trackId,
-        discNumber = discNumber,
-        folderName = bundle.getString(EXTRA_FOLDER_NAME) ?: "",
-        albumId = bundle.getLong(EXTRA_ALBUM_ID),
-        artistId = bundle.getLong(EXTRA_ARTIST_ID),
-        genreId = bundle.getLong(EXTRA_GENRE_ID),
-        year = bundle.getInt(EXTRA_YEAR),
-        dateAdded = bundle.getInt(EXTRA_DATE_ADDED),
-        orderInPlaylist = bundle.getInt(EXTRA_ORDER_IN_PLAYLIST),
-        flags = bundle.getInt(EXTRA_FLAGS)
-    )
+    fun isCurrent() = flags and FLAG_IS_CURRENT != 0
 }
+
+fun ArrayList<Track>.sortSafely(sorting: Int) =
+    sortSafely(Track.getComparator(sorting))
+
+fun Collection<Track>.toMediaItems() =
+    map { it.toMediaItem() }
+
+fun Collection<Track>.toMediaItemsFast() =
+    map {
+        MediaItem.Builder()
+            .setMediaId(it.mediaStoreId.toString())
+            .build()
+    }

@@ -6,8 +6,11 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaMetadataRetriever.*
 import android.os.Handler
 import android.os.Looper
+import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.provider.MediaStore.Audio
+import androidx.documentfile.provider.DocumentFile
+import androidx.core.net.toUri
 import org.fossify.commons.extensions.*
 import org.fossify.commons.helpers.ensureBackgroundThread
 import org.fossify.commons.helpers.isQPlus
@@ -18,7 +21,6 @@ import org.fossify.musicplayer.extensions.config
 import org.fossify.musicplayer.models.*
 import java.io.File
 import java.io.FileInputStream
-import androidx.core.net.toUri
 import org.fossify.musicplayer.extensions.getFriendlyFolder
 
 /**
@@ -463,27 +465,28 @@ class SimpleMediaScanner(private val context: Application) {
     }
 
     private fun findTracksManually(pathsToIgnore: List<String>): ArrayList<Track> {
-        val audioFilePaths = arrayListOf<String>()
-        val excludedPaths = pathsToIgnore.toMutableList().apply { addAll(0, config.excludedFolders) }
+        val audioFileSources = linkedMapOf<String, ManualTrackSource>()
+        val excludedPaths = pathsToIgnore.toMutableSet().apply { addAll(config.excludedFolders) }
 
         for (rootPath in getScanRoots()) {
             if (rootPath.isEmpty()) {
                 continue
             }
 
-            val rootFile = File(rootPath)
-            findAudioFiles(rootFile, audioFilePaths, excludedPaths)
+            findAudioFiles(rootPath, audioFileSources, excludedPaths)
         }
 
-        if (audioFilePaths.isEmpty()) {
+        if (audioFileSources.isEmpty()) {
             return arrayListOf()
         }
 
         val tracks = arrayListOf<Track>()
-        val totalPaths = audioFilePaths.size
+        val trackSources = audioFileSources.values.toList()
+        val totalPaths = trackSources.size
         var pathsScanned = 0
 
-        audioFilePaths.forEach { path ->
+        trackSources.forEach { source ->
+            val path = source.path
             pathsScanned += 1
             maybeShowScanProgress(
                 pathBeingScanned = path,
@@ -493,16 +496,27 @@ class SimpleMediaScanner(private val context: Application) {
 
             val retriever = MediaMetadataRetriever()
             var inputStream: FileInputStream? = null
+            var fileDescriptor: ParcelFileDescriptor? = null
 
             try {
-                retriever.setDataSource(path)
+                if (source.uri != null) {
+                    retriever.setDataSource(context, source.uri)
+                } else {
+                    retriever.setDataSource(path)
+                }
             } catch (ignored: Exception) {
                 try {
-                    inputStream = FileInputStream(path)
-                    retriever.setDataSource(inputStream.fd)
+                    if (source.uri != null) {
+                        fileDescriptor = context.contentResolver.openFileDescriptor(source.uri, "r")
+                        retriever.setDataSource(fileDescriptor?.fileDescriptor ?: throw IllegalStateException("Missing file descriptor"))
+                    } else {
+                        inputStream = FileInputStream(path)
+                        retriever.setDataSource(inputStream.fd)
+                    }
                 } catch (ignored: Exception) {
                     retriever.release()
                     inputStream?.close()
+                    fileDescriptor?.close()
                     return@forEach
                 }
             }
@@ -516,11 +530,11 @@ class SimpleMediaScanner(private val context: Application) {
             val trackId = trackNumber?.firstNumber()
             val discNumber = retriever.extractMetadata(METADATA_KEY_DISC_NUMBER)?.firstNumber()
             val year = retriever.extractMetadata(METADATA_KEY_YEAR)?.toIntOrNull() ?: 0
-            val dateAdded = try {
-                (File(path).lastModified() / 1000L).toInt()
+            val dateAdded = ((source.lastModified.takeIf { it > 0 } ?: try {
+                File(path).lastModified()
             } catch (e: Exception) {
-                0
-            }
+                0L
+            }) / 1000L).toInt()
 
             val genre = retriever.extractMetadata(METADATA_KEY_GENRE).orEmpty()
 
@@ -537,35 +551,87 @@ class SimpleMediaScanner(private val context: Application) {
 
             try {
                 inputStream?.close()
+                fileDescriptor?.close()
                 retriever.release()
             } catch (ignored: Exception) {
             }
         }
 
-        maybeRescanPaths(audioFilePaths)
+        maybeRescanPaths(ArrayList(audioFileSources.keys))
         return tracks
     }
 
-    private fun findAudioFiles(file: File, destination: ArrayList<String>, excludedPaths: MutableList<String>) {
-        if (file.isHidden) {
+    private fun findAudioFiles(path: String, destination: LinkedHashMap<String, ManualTrackSource>, excludedPaths: Set<String>) {
+        if (path.getFilenameFromPath().startsWith('.')) {
             return
         }
 
-        val path = file.absolutePath
         if (path in excludedPaths || path.getParentPath() in excludedPaths) {
             return
         }
 
+        val file = File(path)
         if (file.isFile) {
             if (path.isAudioFast() || path.endsWith(".webm", ignoreCase = true)) {
-                destination.add(path)
+                destination.putIfAbsent(path, ManualTrackSource(path = path, lastModified = file.lastModified()))
             }
-        } else if (!file.containsNoMedia()) {
-            file.listFiles().orEmpty().forEach { child ->
-                findAudioFiles(child, destination, excludedPaths)
+            return
+        }
+
+        if (file.isDirectory) {
+            val children = file.listFiles()
+            if (children != null && !file.containsNoMedia()) {
+                children.forEach { child ->
+                    findAudioFiles(child.absolutePath, destination, excludedPaths)
+                }
+                return
+            }
+        }
+
+        val document = getDocumentFile(path) ?: return
+        findAudioFiles(document, path, destination, excludedPaths)
+    }
+
+    private fun findAudioFiles(document: DocumentFile, path: String, destination: LinkedHashMap<String, ManualTrackSource>, excludedPaths: Set<String>) {
+        val name = document.name.orEmpty()
+        if (name.startsWith('.')) {
+            return
+        }
+
+        if (path in excludedPaths || path.getParentPath() in excludedPaths) {
+            return
+        }
+
+        if (document.isFile) {
+            if (path.isAudioFast() || path.endsWith(".webm", ignoreCase = true)) {
+                destination.putIfAbsent(path, ManualTrackSource(path = path, uri = document.uri, lastModified = document.lastModified()))
+            }
+            return
+        }
+
+        if (document.isDirectory && !path.containsNoMedia()) {
+            document.listFiles().forEach { child ->
+                val childName = child.name ?: return@forEach
+                findAudioFiles(child, "$path/$childName", destination, excludedPaths)
             }
         }
     }
+
+    private fun getDocumentFile(path: String): DocumentFile? {
+        return when {
+            context.isRestrictedSAFOnlyRoot(path) || context.isInAndroidDir(path) -> context.getSomeAndroidSAFDocument(path)
+            context.isPathOnOTG(path) -> context.getSomeDocumentFile(path)
+            context.isAccessibleWithSAFSdk30(path) || context.isRestrictedWithSAFSdk30(path) -> context.getSomeDocumentSdk30(path)
+            context.sdCardPath.isNotEmpty() && path.startsWith(context.sdCardPath) -> context.getSomeDocumentFile(path)
+            else -> null
+        }
+    }
+
+    private data class ManualTrackSource(
+        val path: String,
+        val uri: android.net.Uri? = null,
+        val lastModified: Long = 0L
+    )
 
     private fun getScanRoots(): List<String> {
         return buildList {
@@ -575,13 +641,6 @@ class SimpleMediaScanner(private val context: Application) {
         }.map { it.removeSuffix("/") }
             .filter { it.isNotEmpty() }
             .distinct()
-            .sortedBy { it.length }
-            .fold(arrayListOf()) { roots, path ->
-                if (roots.none { path == it || path.startsWith("$it/") }) {
-                    roots.add(path)
-                }
-                roots
-            }
     }
 
     private fun maybeRescanPaths(paths: ArrayList<String>) {

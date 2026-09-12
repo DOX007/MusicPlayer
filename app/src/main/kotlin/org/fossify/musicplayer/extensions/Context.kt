@@ -32,6 +32,8 @@ import org.fossify.musicplayer.models.Genre
 import org.fossify.musicplayer.models.Track
 import java.io.File
 
+val Context.playlistTracksDAO: PlaylistTracksDao get() = getTracksDB().PlaylistTracksDao()
+
 val Context.config: Config get() = Config.newInstance(applicationContext)
 
 val Context.playlistDAO: PlaylistsDao get() = getTracksDB().PlaylistsDao()

@@ -10,19 +10,26 @@ import org.fossify.musicplayer.interfaces.*
 import org.fossify.musicplayer.models.*
 import org.fossify.musicplayer.objects.MyExecutor
 
-@Database(entities = [Track::class, Playlist::class, QueueItem::class, Artist::class, Album::class, Genre::class], version = 15)
+@Database(
+    entities = [
+        Track::class,
+        Playlist::class,
+        PlaylistTrack::class,
+        QueueItem::class,
+        Artist::class,
+        Album::class,
+        Genre::class
+    ],
+    version = 16
+)
 abstract class SongsDatabase : RoomDatabase() {
 
     abstract fun SongsDao(): SongsDao
-
     abstract fun PlaylistsDao(): PlaylistsDao
-
+    abstract fun PlaylistTracksDao(): PlaylistTracksDao
     abstract fun QueueItemsDao(): QueueItemsDao
-
     abstract fun ArtistsDao(): ArtistsDao
-
     abstract fun AlbumsDao(): AlbumsDao
-
     abstract fun GenresDao(): GenresDao
 
     companion object {
@@ -48,6 +55,7 @@ abstract class SongsDatabase : RoomDatabase() {
                             .addMigrations(MIGRATION_12_13)
                             .addMigrations(MIGRATION_13_14)
                             .addMigrations(MIGRATION_14_15)
+                            .addMigrations(MIGRATION_15_16)
                             .build()
                     }
                 }
@@ -229,6 +237,29 @@ abstract class SongsDatabase : RoomDatabase() {
                     execSQL("DROP TABLE tracks")
                     execSQL("ALTER TABLE tracks_new RENAME to tracks")
                     execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_tracks_id` ON `tracks` (`media_store_id`, `playlist_id`)")
+                }
+            }
+        }
+
+        // Introduce normalized playlist membership table
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.apply {
+                    execSQL(
+                        "CREATE TABLE IF NOT EXISTS `playlist_tracks` (" +
+                            "`playlist_id` INTEGER NOT NULL, " +
+                            "`media_store_id` INTEGER NOT NULL, " +
+                            "PRIMARY KEY(`playlist_id`, `media_store_id`)" +
+                            ")"
+                    )
+                    execSQL("CREATE INDEX IF NOT EXISTS `index_playlist_tracks_playlist_id` ON `playlist_tracks` (`playlist_id`)")
+                    execSQL("CREATE INDEX IF NOT EXISTS `index_playlist_tracks_media_store_id` ON `playlist_tracks` (`media_store_id`)")
+
+                    // Backfill relations from legacy tracks.playlist_id
+                    execSQL(
+                        "INSERT OR IGNORE INTO `playlist_tracks` (`playlist_id`, `media_store_id`) " +
+                            "SELECT `playlist_id`, `media_store_id` FROM `tracks` WHERE `playlist_id` != 0"
+                    )
                 }
             }
         }

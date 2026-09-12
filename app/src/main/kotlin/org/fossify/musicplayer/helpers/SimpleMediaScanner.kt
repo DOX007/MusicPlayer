@@ -575,6 +575,13 @@ class SimpleMediaScanner(private val context: Application) {
         }.map { it.removeSuffix("/") }
             .filter { it.isNotEmpty() }
             .distinct()
+            .sortedBy { it.length }
+            .fold(arrayListOf()) { roots, path ->
+                if (roots.none { path == it || path.startsWith("$it/") }) {
+                    roots.add(path)
+                }
+                roots
+            }
     }
 
     private fun maybeRescanPaths(paths: ArrayList<String>) {

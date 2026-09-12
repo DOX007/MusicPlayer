@@ -122,6 +122,10 @@ class Config(context: Context) : BaseConfig(context) {
         get() = prefs.getStringSet(EXCLUDED_FOLDERS, HashSet())!!
         set(excludedFolders) = prefs.edit().remove(EXCLUDED_FOLDERS).putStringSet(EXCLUDED_FOLDERS, excludedFolders).apply()
 
+    var customMusicPaths: MutableSet<String>
+        get() = prefs.getStringSet(CUSTOM_MUSIC_PATHS, HashSet())!!
+        set(customMusicPaths) = prefs.edit().remove(CUSTOM_MUSIC_PATHS).putStringSet(CUSTOM_MUSIC_PATHS, customMusicPaths).apply()
+
     fun addExcludedFolder(path: String) {
         addExcludedFolders(HashSet(listOf(path)))
     }
@@ -136,5 +140,21 @@ class Config(context: Context) : BaseConfig(context) {
         val currExcludedFolders = HashSet(excludedFolders)
         currExcludedFolders.remove(path)
         excludedFolders = currExcludedFolders
+    }
+
+    fun addCustomMusicPath(path: String) {
+        addCustomMusicPaths(HashSet(listOf(path)))
+    }
+
+    fun addCustomMusicPaths(paths: Set<String>) {
+        val currCustomMusicPaths = HashSet(customMusicPaths)
+        currCustomMusicPaths.addAll(paths.map { it.removeSuffix("/") })
+        customMusicPaths = currCustomMusicPaths.filter { it.isNotEmpty() }.toHashSet()
+    }
+
+    fun removeCustomMusicPath(path: String) {
+        val currCustomMusicPaths = HashSet(customMusicPaths)
+        currCustomMusicPaths.remove(path)
+        customMusicPaths = currCustomMusicPaths
     }
 }

@@ -62,7 +62,7 @@ class SimpleMediaScanner(private val context: Application) {
         ensureBackgroundThread {
             try {
                 scanMediaStore()
-                if (isQPlus()) {
+                if (isQPlus() || config.customMusicPaths.isNotEmpty()) {
                     onScanComplete?.invoke(false)
                     scanFilesManually()
                 }
@@ -464,7 +464,7 @@ class SimpleMediaScanner(private val context: Application) {
         val audioFilePaths = arrayListOf<String>()
         val excludedPaths = pathsToIgnore.toMutableList().apply { addAll(0, config.excludedFolders) }
 
-        for (rootPath in arrayOf(context.internalStoragePath, context.sdCardPath)) {
+        for (rootPath in getScanRoots()) {
             if (rootPath.isEmpty()) {
                 continue
             }
@@ -563,6 +563,16 @@ class SimpleMediaScanner(private val context: Application) {
                 findAudioFiles(child, destination, excludedPaths)
             }
         }
+    }
+
+    private fun getScanRoots(): List<String> {
+        return buildList {
+            add(context.internalStoragePath)
+            add(context.sdCardPath)
+            addAll(config.customMusicPaths)
+        }.map { it.removeSuffix("/") }
+            .filter { it.isNotEmpty() }
+            .distinct()
     }
 
     private fun maybeRescanPaths(paths: ArrayList<String>) {

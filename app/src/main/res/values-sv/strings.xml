@@ -77,6 +77,10 @@
     <string name="create_playlist_from_queue">Skapa spellista från kö</string>
     <string name="equalizer">Frekvenskorrigerare</string>
     <string name="swap_prev_next">Växla hörlurars föregående- och nästaknappar</string>
+    <string name="add_folder">Lägg till mapp</string>
+    <string name="custom_music_folders">Anpassade musikmappar</string>
+    <string name="manage_custom_music_folders">Hantera anpassade musikmappar</string>
+    <string name="custom_music_folder_description">Lägg till mappar som ska skannas manuellt efter ljudfiler när den vanliga medieskanningen missar dem.</string>
     <string name="exclude_folder_description">När du utesluter en mapp hindrar det alla ljudfiler i mappen från att visas. Filer som har lagts till i spellistor manuellt påverkas inte.</string>
     <string name="rescan_media">Skanna media igen</string>
     <string name="faq_1_title">Hur kan jag snabbspola låtar\?</string>

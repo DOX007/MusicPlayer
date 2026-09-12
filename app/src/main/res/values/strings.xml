@@ -84,6 +84,10 @@
     <!-- Settings -->
     <string name="equalizer">Equalizer</string>
     <string name="swap_prev_next">Swap previous/next headphone buttons</string>
+    <string name="add_folder">Add folder</string>
+    <string name="custom_music_folders">Custom music folders</string>
+    <string name="manage_custom_music_folders">Manage custom music folders</string>
+    <string name="custom_music_folder_description">Add folders that should be scanned manually for audio files when the regular media scan misses them.</string>
     <string name="exclude_folder_description">Excluding a folder will prevent the displaying of all audio files within. Files manually added to playlists will not be affected.</string>
     <string name="rescan_media">Rescan media</string>
     <!-- FAQ -->

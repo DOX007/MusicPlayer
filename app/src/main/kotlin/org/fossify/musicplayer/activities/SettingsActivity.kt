@@ -9,6 +9,7 @@ import org.fossify.commons.helpers.NavigationIcon
 import org.fossify.commons.helpers.isTiramisuPlus
 import org.fossify.commons.models.RadioItem
 import org.fossify.musicplayer.R
+import org.fossify.musicplayer.activities.CustomMusicFoldersActivity
 import org.fossify.musicplayer.databinding.ActivitySettingsBinding
 import org.fossify.musicplayer.dialogs.ManageVisibleTabsDialog
 import org.fossify.musicplayer.extensions.config
@@ -40,6 +41,7 @@ class SettingsActivity : SimpleControllerActivity() {
         setupCustomizeWidgetColors()
         setupUseEnglish()
         setupLanguage()
+        setupManageCustomMusicFolders()
         setupManageExcludedFolders()
         setupManageShownTabs()
         setupSwapPrevNext()
@@ -128,6 +130,12 @@ class SettingsActivity : SimpleControllerActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun setupManageCustomMusicFolders() {
+        binding.settingsManageCustomMusicFoldersHolder.setOnClickListener {
+            startActivity(Intent(this, CustomMusicFoldersActivity::class.java))
         }
     }
 

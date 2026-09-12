@@ -61,13 +61,13 @@ class AudioHelper(private val context: Context) {
         context.tracksDAO.updateSongInfo(newPath, artist, title, oldPath)
     }
 
-    fun deleteTrack(mediaStoreId: Long) {
-        context.tracksDAO.removeTrack(mediaStoreId)
+    fun deleteTrack(mediaStoreId: Long, playlistId: Int) {
+        context.tracksDAO.removeTrackFromPlaylist(mediaStoreId, playlistId)
     }
 
     fun deleteTracks(tracks: List<Track>) {
         tracks.forEach {
-            deleteTrack(it.mediaStoreId)
+            deleteTrack(it.mediaStoreId, it.playListId)
         }
     }
 
@@ -239,7 +239,6 @@ class AudioHelper(private val context: Context) {
     fun getQueuedTracks(queueItems: List<QueueItem> = context.queueDAO.getAll()): ArrayList<Track> {
         val allTracks = getAllTracks().associateBy { it.mediaStoreId }
 
-        // make sure we fetch the songs in the order they were displayed in
         val tracks = queueItems.mapNotNull { queueItem ->
             val track = allTracks[queueItem.trackId]
             if (track != null) {
@@ -255,9 +254,6 @@ class AudioHelper(private val context: Context) {
         return tracks as ArrayList<Track>
     }
 
-    /**
-     * Executes [callback] with current track as quickly as possible and then proceeds to load the complete queue with all tracks.
-     */
     fun getQueuedTracksLazily(callback: (tracks: List<Track>, startIndex: Int, startPositionMs: Long) -> Unit) {
         ensureBackgroundThread {
             var queueItems = context.queueDAO.getAll()
@@ -278,11 +274,9 @@ class AudioHelper(private val context: Context) {
                 return@ensureBackgroundThread
             }
 
-            // immediately return the current track.
             val startPositionMs = currentItem.lastPosition.seconds.inWholeMilliseconds
             callback(listOf(currentTrack), 0, startPositionMs)
 
-            // return the rest of the queued tracks.
             val queuedTracks = getQueuedTracks(queueItems)
             val currentIndex = queuedTracks.indexOfFirstOrNull { it.mediaStoreId == currentTrack.mediaStoreId } ?: 0
             callback(queuedTracks, currentIndex, startPositionMs)

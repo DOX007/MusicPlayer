@@ -8,10 +8,10 @@ import org.fossify.musicplayer.models.Track
 
 @Dao
 interface SongsDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insert(track: Track)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     fun insertAll(tracks: List<Track>)
 
     @Query("SELECT * FROM tracks")
